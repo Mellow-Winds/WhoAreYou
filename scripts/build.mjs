@@ -1,0 +1,11 @@
+import { mkdir, copyFile, cp } from 'node:fs/promises';
+await mkdir('dist/vendor', { recursive: true });
+await copyFile('index.html', 'dist/index.html');
+await cp('src', 'dist/src', { recursive: true });
+await copyFile('node_modules/relationship.js/dist/relationship.min.mjs', 'dist/vendor/relationship.mjs');
+await copyFile('node_modules/relationship.js/LICENSE', 'dist/vendor/relationship-LICENSE.txt');
+await mkdir('dist/vendor/three/addons/controls', { recursive: true });
+for (const name of ['three.module.js','three.core.js']) await copyFile('node_modules/three/build/'+name, 'dist/vendor/three/'+name);
+await copyFile('node_modules/three/examples/jsm/controls/OrbitControls.js', 'dist/vendor/three/addons/controls/OrbitControls.js');
+await copyFile('node_modules/three/LICENSE', 'dist/vendor/three/LICENSE.txt');
+console.log('Built static site in dist/ (including local kinship engine, Three.js and licenses)');
