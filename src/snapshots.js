@@ -1,22 +1,24 @@
-import { validateState } from './domain.js';
+import { migrateState } from './domain.js';
 import { loadState, saveState, STORAGE_KEY } from './storage.js';
 import { fingerprint } from './organize.js';
 export const SNAPSHOT_PREFIX = 'whoareyou.snapshot.v1.';
 export const LEGACY_BACKUP_KEY = STORAGE_KEY + '.before-optimization';
+export const MIGRATION_BACKUP_KEY = STORAGE_KEY + '.before-v2';
+const isRawBackup=key=>key===LEGACY_BACKUP_KEY||key===MIGRATION_BACKUP_KEY;
 const snapshotKinds = new Set(['organize', 'clear', 'restore', 'delete', 'add', 'alias', 'checkpoint']);
 function validateRestoreSource(source, kind) {
   if (source === undefined) return;
   if (kind !== 'restore' || !source || typeof source.key !== 'string' ||
-      !(source.key.startsWith(SNAPSHOT_PREFIX) || source.key === LEGACY_BACKUP_KEY) ||
+      !(source.key.startsWith(SNAPSHOT_PREFIX) || isRawBackup(source.key)) ||
       !['before','after'].includes(source.stage)) throw new Error('恢复来源无效。');
 }
 export function readSnapshot(storage, key) {
-  if (key === LEGACY_BACKUP_KEY) {
+  if (isRawBackup(key)) {
     let state;
     try { state = JSON.parse(storage.getItem(key)); }
     catch { throw new Error('早期资料备份无法读取，原始内容已保留。'); }
-    validateState(state);
-    return { version:1, kind:'checkpoint', label:'早期资料备份', createdAt:'', before:state, after:state, status:'committed', legacy:true };
+    state=migrateState(state);
+    return { version:1, kind:'checkpoint', label:key===MIGRATION_BACKUP_KEY?'升级前资料':'早期资料备份', createdAt:'', before:state, after:state, status:'committed', legacy:true };
   }
   if (!key.startsWith(SNAPSHOT_PREFIX)) throw new Error('备份编号无效。');
   let record;
@@ -26,7 +28,7 @@ export function readSnapshot(storage, key) {
       (record.label !== undefined && (typeof record.label !== 'string' || record.label.length > 80)) ||
       (record.status !== undefined && !['pending','committed'].includes(record.status))) throw new Error('备份格式无效。');
   validateRestoreSource(record.restoreSource, record.kind);
-  validateState(record.before); validateState(record.after);
+  record.before=migrateState(record.before); record.after=migrateState(record.after);
   return record;
 }
 export function listSnapshots(storage) {
@@ -34,12 +36,12 @@ export function listSnapshots(storage) {
   // Preserve newest-first order for records written in the same millisecond.
   for (let i = storage.length - 1; i >= 0; i--) {
     const key = storage.key(i);
-    if (key?.startsWith(SNAPSHOT_PREFIX) || key === LEGACY_BACKUP_KEY) { try { entries.push({ key, ...readSnapshot(storage, key) }); } catch(error) { entries.push({key,invalid:true,error:error.message,createdAt:''}); } }
+    if (key?.startsWith(SNAPSHOT_PREFIX) || isRawBackup(key)) { try { entries.push({ key, ...readSnapshot(storage, key) }); } catch(error) { entries.push({key,invalid:true,error:error.message,createdAt:''}); } }
   }
   return entries.sort((a,b) => b.createdAt.localeCompare(a.createdAt));
 }
 export function commitWithBackup(storage, baseline, next, kind, label, restoreSource) {
-  validateState(next);
+  next=migrateState(next); baseline=migrateState(baseline);
   if (!snapshotKinds.has(kind) || kind === 'checkpoint') throw new Error('备份操作类型无效。');
   if (label !== undefined && (typeof label !== 'string' || label.length > 80)) throw new Error('存档名称无效。');
   validateRestoreSource(restoreSource, kind);

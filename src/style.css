@@ -49,8 +49,8 @@ legend,.title-label { display:block; margin-bottom:12px; padding:0; font-size:12
 .relation-option input:checked + span { border-color:#697d9f; background:#273248; color:#f4f6fc; }
 .relation-option input:focus-visible + span { outline:2px solid #91a6cb; outline-offset:3px; }
 .path-preview { font-size:11px; line-height:1.8; color:#737e92; overflow-wrap:anywhere; margin:12px 0 0; }
-#kin-title { display:block; width:100%; padding:12px; border:1px solid #343d4f; border-radius:8px; background:#080b11; color:#e4e8ef; font-size:14px; }
-#kin-title::placeholder { color:#596477; }
+#kin-title, #kin-name { display:block; width:100%; padding:12px; border:1px solid #343d4f; border-radius:8px; background:#080b11; color:#e4e8ef; font-size:14px; }
+#kin-title::placeholder, #kin-name::placeholder { color:#596477; }
 .dialog-actions { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:10px; margin-top:20px; }
 .primary,.secondary { padding:10px 18px; border-radius:8px; border:1px solid transparent; font-size:13px; }
 .primary { background:#d4deef; color:#151d2a; }
@@ -87,16 +87,7 @@ legend,.title-label { display:block; margin-bottom:12px; padding:0; font-size:12
 @media (hover:none) { .add-person { opacity:1; pointer-events:auto; width:36px; height:36px; top:-15px; right:13px; } }
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none !important; transition:none !important; } }
 
-.home-page { min-height:100dvh; display:grid; place-items:center; background:radial-gradient(ellipse at 50% 42%,#111d34 0, #03060c 36%,#000 70%); isolation:isolate; }
-.home-content { position:relative; z-index:1; text-align:center; padding:24px; }
-.home-content h1 { font-size:clamp(42px,9vw,82px); font-weight:400; letter-spacing:-.055em; margin:12px 0 18px; color:#edf2ff; }
 .eyebrow { font-size:12px; letter-spacing:.35em; color:#9baeca; }
-#home-count { color:#8995ac; font-size:13px; margin-bottom:32px; }
-.home-content .primary { padding:14px 30px; border-radius:24px; }
-.home-content .secondary { display:block; margin:18px auto 0; }
-.home-orbit { position:absolute; width:min(70vw,650px); height:min(70vw,650px); border:1px solid #63759920; border-radius:50%; transform:rotate(-25deg) scaleY(.65); pointer-events:none; }
-.home-orbit i { position:absolute; width:5px; height:5px; background:#bdd6ff; border-radius:50%; box-shadow:0 0 20px #a5c8ff; top:15%;left:14%; animation:star-breathe 4s ease-in-out infinite; }
-.home-orbit i:nth-child(2){top:83%;left:83%;animation-delay:-1.5s}.home-orbit i:nth-child(3){top:17%;left:87%;animation-delay:-3s}
 .map-toolbar { position:fixed; top:max(16px,env(safe-area-inset-top));left:18px;right:18px;z-index:8;display:flex;align-items:center;justify-content:space-between;gap:10px;pointer-events:none; }
 .map-toolbar button { pointer-events:auto;min-height:32px;border:1px solid #293344;border-radius:999px;padding:5px 11px;color:#b9c8e1;background:#0b101aeb;font-size:12px;white-space:nowrap;transition:background-color 140ms,color 140ms; }
 .map-toolbar button:hover { background:#202b3e;color:#edf3ff; }
@@ -176,5 +167,14 @@ button.history-row:hover { background:#171f2d; }
 .action-feedback {position:fixed;top:72px;left:50%;transform:translateX(-50%);z-index:12;display:flex;align-items:center;gap:14px;max-width:calc(100% - 24px);padding:12px 18px;border:1px solid #3c4c64;background:#121b2bea;border-radius:12px;font-size:12px;}
 .action-feedback button { border:0;background:none;color:#bed5ff;white-space:nowrap; }
 #map-page[hidden] * { animation-play-state:paused !important; }
-@media(prefers-reduced-motion:reduce){.home-orbit i{animation:none}}
 .tree-scroll { position:relative; z-index:1; }
+
+.map-toolbar { justify-content:flex-end; }
+.optimization-action.secondary { border:1px solid #586981; border-radius:12px; background:#131a25; width:100%; }
+.optimization-action.secondary:hover { border-color:#b6cbed; background:#202c3e; }
+.optimization-action.secondary:focus-visible { outline:2px solid #d6e5ff; outline-offset:3px; }
+#kin-name { width:100%; margin-bottom:16px; }
+.alias-form label { display:block; margin:10px 0 5px; color:#aebbd0; font-size:14px; }
+#help-dialog p { color:#b4bfd1; line-height:1.8; }
+#help-dialog h3 { margin-top:24px; }
+.relation-option span { font-size:clamp(18px,4vw,28px); }

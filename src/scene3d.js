@@ -58,8 +58,9 @@ export function createScene3D(host, surface, nodes, { inset = () => 0, onError =
     const blend=reduce()?1:1-Math.exp(-dt/100);
     let edge=0;state.people.forEach((person,i)=>{
       const p=positions.get(person.id);buffer.setXYZ(i,p.x,p.y,p.z);
-      const color=new THREE.Color(person.id===selected?0xffffff:path.has(person.id)?0xbdd9ff:person.id==='me'?0xe5eeff:0x94a5c4);colors.setXYZ(i,THREE.MathUtils.lerp(colors.getX(i),color.r,blend),THREE.MathUtils.lerp(colors.getY(i),color.g,blend),THREE.MathUtils.lerp(colors.getZ(i),color.b,blend));
-      if(person.parentId){const parent=positions.get(person.parentId);lineBuffer.setXYZ(edge,parent.x,parent.y,parent.z);lineBuffer.setXYZ(edge+1,p.x,p.y,p.z);
+      const color=new THREE.Color(person.id===selected?0xffffff:path.has(person.id)?0xbdd9ff:person.parentId===null?0xe5eeff:0x94a5c4);colors.setXYZ(i,THREE.MathUtils.lerp(colors.getX(i),color.r,blend),THREE.MathUtils.lerp(colors.getY(i),color.g,blend),THREE.MathUtils.lerp(colors.getZ(i),color.b,blend));
+      const parentId=person.parentId||(state.socialEdges||[]).find(e=>e.to===person.id)?.from;
+      if(parentId){const parent=positions.get(parentId);lineBuffer.setXYZ(edge,parent.x,parent.y,parent.z);lineBuffer.setXYZ(edge+1,p.x,p.y,p.z);
         const c=new THREE.Color(path.has(person.id)?0xa7c7ff:0x39465c);lineColors.setXYZ(edge,c.r,c.g,c.b);lineColors.setXYZ(edge+1,c.r,c.g,c.b);edge+=2;}
     });
     for(const attr of [buffer,colors,lineBuffer,lineColors])attr.needsUpdate=true;

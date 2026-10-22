@@ -14,7 +14,7 @@ test('version differences describe added, renamed, moved and removed people',()=
   const root=initialState(),withDad=addPerson(root,'me','f','爸爸','dad');
   const renamed=updateAlias(withDad,'dad','老爸');
   assert.match(diffStates(root,withDad)[0].text,/添加「爸爸」/);
-  assert.match(diffStates(withDad,renamed)[0].text,/备注名：无 → 老爸/);
+  assert.match(diffStates(withDad,renamed)[0].text,/昵称：无 → 老爸/);
   assert.match(diffStates(renamed,root)[0].text,/删除「老爸」/);
   const withGrandma=addPerson(withDad,'dad','m','奶奶','gm');
   const moved={...withGrandma,people:withGrandma.people.map(p=>p.id==='gm'?{...p,parentId:'me'}:p)};

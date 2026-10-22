@@ -13,7 +13,7 @@ function summary(snapshot) {
   if (!changes.length) return label;
   const ids = [...new Set(changes.map(change => change.id))];
   const people = new Map([...snapshot.before.people, ...snapshot.after.people].map(person => [person.id, person]));
-  const names = ids.slice(0, 2).map(id => displayName(people.get(id))).join('、');
+  const names = ids.slice(0, 2).map(id => displayName(people.get(id),snapshot.after.people.some(p=>p.id===id)?snapshot.after:snapshot.before)).join('、');
   return label + '：' + names + (ids.length > 2 ? '等 ' + ids.length + ' 位' : '');
 }
 

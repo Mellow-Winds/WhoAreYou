@@ -10,5 +10,6 @@ export function ancestorChain(state, id) {
     current = people.get(current.parentId);
     if (!current) throw new Error('人物的上级不存在。');
   }
+  if(chain.at(-1).id!=='me')chain.push(people.get('me'));
   return chain.reverse();
 }

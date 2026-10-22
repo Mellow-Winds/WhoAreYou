@@ -1,8 +1,9 @@
-import { validateState, pathCodes, displayName } from './domain.js';
+import { validateState, pathCodes, displayName, familyRoot, migrateState } from './domain.js';
 import { kinshipResult } from './kinship.js';
 const clone = value => structuredClone(value);
 const uniquePaths = paths => [...new Map(paths.map(path => [path.join(','), path])).values()];
-export const fingerprint = state => JSON.stringify(validateState(state));
+const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
+export const fingerprint = state => JSON.stringify(canonical(migrateState(state)));
 function descendants(state, id) {
   const found = new Set([id]);
   let changed = true;
@@ -11,16 +12,17 @@ function descendants(state, id) {
 }
 function scanContext(state) {
   const paths=new Map(),byPath=new Map();
-  for(const person of state.people){const path=pathCodes(state,person.id),key=path.join(',');paths.set(person.id,path);if(!byPath.has(key))byPath.set(key,[]);byPath.get(key).push(person);}
+  for(const person of state.people){const path=pathCodes(state,person.id),key=JSON.stringify([familyRoot(state,person.id).id,path]);paths.set(person.id,path);if(!byPath.has(key))byPath.set(key,[]);byPath.get(key).push(person);}
   return {paths,byPath};
 }
 export function suggestionsFor(state, person, context=scanContext(state)) {
-  if(person.id==='me')return null;
+  if(person.parentId===null)return null;
+  const key=path=>JSON.stringify([familyRoot(state,person.id).id,path]);
   const originalPath=context.paths.get(person.id),inferred=kinshipResult(originalPath),branch=descendants(state,person.id);
   const alternatives=[...new Map([originalPath,...inferred.paths.filter(path=>path.length<=originalPath.length)].map(path=>[path.join(','),path])).values()];
   const options=[];
-  for(const path of alternatives)for(const target of context.byPath.get(path.join(','))||[])if(!branch.has(target.id))options.push({key:'existing:'+target.id,kind:'existing',personId:target.id,path,title:displayName(target)});
-  for(const path of alternatives.filter(path=>path.length>0&&path.length<originalPath.length))for(const parent of context.byPath.get(path.slice(0,-1).join(','))||[]){
+  for(const path of alternatives)for(const target of context.byPath.get(key(path))||[])if(!branch.has(target.id))options.push({key:'existing:'+target.id,kind:'existing',personId:target.id,path,title:displayName(target)});
+  for(const path of alternatives.filter(path=>path.length>0&&path.length<originalPath.length))for(const parent of context.byPath.get(key(path.slice(0,-1)))||[]){
     if(!branch.has(parent.id))options.push({key:'new:'+parent.id+':'+path.at(-1),kind:'new',parentId:parent.id,relation:path.at(-1),path});
   }
   const unique=[...new Map(options.map(option=>[option.key,option])).values()];
@@ -51,7 +53,7 @@ export function applyDecisions(state, decisions) {
     if (!option) throw new Error('整理建议已变化，请重新扫描。');
     if(option.kind==='existing'){
       const target=state.people.find(p=>p.id===option.personId),chosen=decision.titleChoice==='source'?person:target;
-      const title=JSON.stringify([chosen.title,chosen.alias ?? null]);
+      const title=JSON.stringify([chosen.title,chosen.nickname ?? chosen.alias ?? null,chosen.name ?? null]);
       if(targetTitles.has(target.id)&&targetTitles.get(target.id)!==title)throw new Error('同一存留人物的称呼选择冲突，请调整。');
       targetTitles.set(target.id,title);
     }
@@ -76,9 +78,10 @@ export function applyDecisions(state, decisions) {
       const record = clone(source);
       target.mergeHistory = [...(target.mergeHistory || []), { ...record, originalPath:originalPaths.get(source.id) }];
       target.sourcePaths = uniquePaths([...(target.sourcePaths || []), ...(source.sourcePaths || []), originalPaths.get(source.id)]);
-      if (operation.titleChoice === 'source' && (target.title !== source.title || target.alias !== source.alias)) {
+      if (operation.titleChoice === 'source' && (target.title !== source.title || target.alias !== source.alias || target.nickname !== source.nickname || target.name !== source.name)) {
         target.mergeHistory.push({ ...previousTarget, originalPath:originalPaths.get(target.id) });
         target.title = source.title;
+        for(const field of ['name','nickname']){if(source[field]!==undefined)target[field]=source[field];else if(field!=='name'||target.parentId!==null)delete target[field];}
         if (source.alias !== undefined) target.alias = source.alias;
         else delete target.alias;
       }

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { Window } from 'happy-dom';
+import { migrateState } from '../src/domain.js';
 import { STORAGE_KEY } from '../src/storage.js';
 import { SNAPSHOT_PREFIX } from '../src/snapshots.js';
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
@@ -37,7 +38,7 @@ test('a damaged backup remains visible without blocking valid backups or recover
   click(w,'#show-backups');
   assert.match(w.document.querySelector('#backup-list').textContent,/损坏记录/);
   const version=w.document.querySelector('#backup-list button');assert.ok(version);version.click();click(w,'#version-before');click(w,'#confirm-action');
-  assert.deepEqual(JSON.parse(w.localStorage.getItem(STORAGE_KEY)),data);assert.equal(w.localStorage.getItem(SNAPSHOT_PREFIX+'broken'),'{broken');
+  assert.deepEqual(JSON.parse(w.localStorage.getItem(STORAGE_KEY)),migrateState(data));assert.equal(w.localStorage.getItem(SNAPSHOT_PREFIX+'broken'),'{broken');
 });
 
 test('add flow preserves custom titles, duplicate siblings require confirmation, and reload restores data', async t => {
@@ -215,15 +216,15 @@ test('selection keeps the camera still while content cross-fades and rapid chang
   click(w,'#close-details');assert.equal(w.document.querySelectorAll('.detail-content.outgoing').length,0);assert.equal(w.document.querySelector('#details').hidden,true);
 });
 
-test('home navigation shows actual counts, enters map and keeps existing data on return',async t=>{
+test('startup opens the map directly and help preserves existing data',async t=>{
   const raw=JSON.stringify(data),w=await page(raw);t.after(()=>w.happyDOM.close());
-  click(w,'#go-home');assert.equal(w.document.querySelector('#home-page').hidden,false);assert.equal(w.document.querySelector('#map-page').hidden,true);
-  assert.equal(w.document.querySelector('#home-count').textContent,'4 位亲人');
-  click(w,'#enter-map');assert.equal(w.document.querySelector('#map-page').hidden,false);
-  assert.equal(w.localStorage.getItem(STORAGE_KEY),raw);assert.match(w.document.querySelector('#view-status').textContent,/2D/);
+  assert.equal(w.document.querySelector('#home-page'),null);assert.equal(w.document.querySelector('#map-page').hidden,false);
+  click(w,'#show-help');assert.equal(w.document.querySelector('#help-dialog').open,true);
+  assert.match(w.document.querySelector('#help-dialog').textContent,/WASD/);
+  click(w,'[data-close-dialog="help-dialog"]');assert.equal(w.localStorage.getItem(STORAGE_KEY),raw);
 });
 
-test('2D keyboard moves after toolbar focus and mode fallback, but never on the home page or in forms',async t=>{
+test('2D keyboard moves after toolbar focus and mode fallback, but never in help or forms',async t=>{
   const callbacks=new Map();let frame=0,time=0;
   const w=await page(JSON.stringify(data),{setup(win){win.requestAnimationFrame=cb=>{callbacks.set(++frame,cb);return frame;};win.cancelAnimationFrame=id=>callbacks.delete(id);}});t.after(()=>w.happyDOM.close());
   const step=()=>{time+=16;const pending=[...callbacks.values()];callbacks.clear();for(const cb of pending)cb(time);};
@@ -240,8 +241,8 @@ test('2D keyboard moves after toolbar focus and mode fallback, but never on the 
   const modeButton=w.document.querySelector('#view-mode');modeButton.focus();modeButton.click();assert.equal(w.document.activeElement.id,'tree-scroll');
   const before=parseFloat(node.style.left);key('keydown','KeyD');step();key('keyup','KeyD');assert.ok(parseFloat(node.style.left)<before);
   click(w,'.person[data-id="me"] .add-person');const input=w.document.querySelector('#kin-title');input.focus();key('keydown','KeyW');assert.equal(callbacks.size,0);click(w,'#cancel');
-  key('keydown','KeyW');click(w,'#go-home');assert.equal(callbacks.size,0);key('keydown','KeyD');assert.equal(callbacks.size,0);
-  click(w,'#enter-map');key('keydown','KeyD');step();key('keyup','KeyD');assert.equal(callbacks.size,0);
+  click(w,'#show-help');key('keydown','KeyD');step();assert.equal(callbacks.size,0);
+  click(w,'[data-close-dialog="help-dialog"]');key('keydown','KeyD');step();key('keyup','KeyD');assert.equal(callbacks.size,0);
 });
 
 async function scanned(w){for(let n=0;n<200;n++){if(!w.document.querySelector('#scan-progress').textContent.startsWith('正在检查'))return;await new Promise(resolve=>setTimeout(resolve,10));}throw new Error('Scan did not finish');}
@@ -253,7 +254,7 @@ test('whole-tree organize previews selected shortening, confirms it and restores
   select.value='new:me:d';select.dispatchEvent(new w.Event('change'));
   click(w,'#preview-organize');assert.equal(w.document.querySelector('#confirm-dialog').open,true);assert.equal(w.localStorage.getItem(STORAGE_KEY),raw);
   click(w,'#confirm-action');const saved=JSON.parse(w.localStorage.getItem(STORAGE_KEY));assert.equal(saved.people.find(p=>p.id==='daughter').parentId,'me');assert.equal(saved.people.find(p=>p.id==='daughter').title,'小宝');
-  click(w,'#undo-last');click(w,'#confirm-action');assert.deepEqual(JSON.parse(w.localStorage.getItem(STORAGE_KEY)),JSON.parse(raw));
+  click(w,'#undo-last');click(w,'#confirm-action');assert.deepEqual(JSON.parse(w.localStorage.getItem(STORAGE_KEY)),migrateState(JSON.parse(raw)));
 });
 
 test('clear needs confirmation, preserves backups and can recover after page reload',async t=>{
@@ -263,8 +264,8 @@ test('clear needs confirmation, preserves backups and can recover after page rel
   click(w,'#clear-tree');click(w,'#confirm-action');assert.equal(JSON.parse(w.localStorage.getItem(STORAGE_KEY)).people.length,1);
   const savedKeys=Array.from({length:w.localStorage.length},(_,i)=>w.localStorage.key(i)).map(key=>[key,w.localStorage.getItem(key)]);
   const reopened=await page(undefined,{setup(win){for(const [key,value]of savedKeys)win.localStorage.setItem(key,value);}});t.after(()=>reopened.happyDOM.close());
-  click(reopened,'#go-home');assert.equal(reopened.document.querySelector('#restore-home').hidden,false);
-  click(reopened,'#restore-home');click(reopened,'#confirm-action');assert.deepEqual(JSON.parse(reopened.localStorage.getItem(STORAGE_KEY)),data);
+  click(reopened,'#show-help');assert.equal(reopened.document.querySelector('#restore-cleared').hidden,false);
+  click(reopened,'#restore-cleared');click(reopened,'#confirm-action');assert.deepEqual(JSON.parse(reopened.localStorage.getItem(STORAGE_KEY)),migrateState(data));
 });
 
 test('organize title conflicts require choice and stale clear confirmation cannot overwrite a new relative',async t=>{
@@ -280,11 +281,11 @@ test('organize title conflicts require choice and stale clear confirmation canno
 test('card title edits an alias without changing the relationship or original title',async t=>{
   const w=await page(JSON.stringify(data));t.after(()=>w.happyDOM.close());
   click(w,'.person[data-id="gm"] .person-main');click(w,'#detail-title');
-  const input=w.document.querySelector('#alias-input');assert.equal(input.value,'阿奶');
+  const input=w.document.querySelector('#alias-input');assert.equal(input.value,'');
   input.value='奶奶昵称';w.document.querySelector('#alias-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
   let saved=JSON.parse(w.localStorage.getItem(STORAGE_KEY));
   assert.equal(saved.people.find(p=>p.id==='gm').title,'阿奶');
-  assert.equal(saved.people.find(p=>p.id==='gm').alias,'奶奶昵称');
+  assert.equal(saved.people.find(p=>p.id==='gm').nickname,'奶奶昵称');
   assert.equal(w.document.querySelector('#detail-title').textContent,'奶奶昵称');
   assert.equal(w.document.querySelector('.person[data-id="gm"] .person-title').textContent,'奶奶昵称');
   assert.equal(w.document.querySelector('#detail-path').textContent,'我的爸爸的妈妈');
@@ -305,9 +306,9 @@ test('delete acts on the displayed ancestor, confirms the whole subtree, and can
   click(w,'#delete-person');click(w,'#confirm-action');
   assert.deepEqual(JSON.parse(w.localStorage.getItem(STORAGE_KEY)).people.map(p=>p.id),['me','dad']);
   assert.equal(w.document.querySelector('#details').hidden,true);
-  assert.equal(w.document.querySelector('#home-count').textContent,'1 位亲人');
+  assert.equal(w.document.querySelectorAll('.person').length,2);
   click(w,'#undo-last');click(w,'#confirm-action');
-  assert.deepEqual(JSON.parse(w.localStorage.getItem(STORAGE_KEY)),data);
+  assert.deepEqual(JSON.parse(w.localStorage.getItem(STORAGE_KEY)),migrateState(data));
   click(w,'.person[data-id="me"] .person-main');
   assert.equal(w.document.querySelector('#delete-person').hidden,true);
 });
@@ -316,8 +317,8 @@ test('repeated spouse warning offers vertical one-click choices and needs an exp
   const raw=JSON.stringify({version:1,people:[data.people[0],{id:'husband',parentId:'me',relation:'h',title:'老公'}]});
   const w=await page(raw);t.after(()=>w.happyDOM.close());
   click(w,'.person[data-id="husband"] .add-person');choose(w,'h');
-  assert.equal(w.document.querySelector('#optimization-heading').textContent,'检测到问题');
-  assert.match(w.document.querySelector('#optimization-reason').textContent,/连续的丈夫关系需要确认/);
+  assert.equal(w.document.querySelector('#optimization-heading').textContent,'检测到需要核对的关系');
+  assert.match(w.document.querySelector('#optimization-reason').textContent,/为男性关系人物添加丈夫/);
   assert.equal(w.document.querySelector('#add-actions').hidden,true);
   assert.deepEqual([...w.document.querySelectorAll('#optimization button')].map(button=>button.textContent.split('我')[0].trim()).filter(Boolean).at(0),'无视，直接添加');
   submit(w);assert.equal(w.localStorage.getItem(STORAGE_KEY),raw);
@@ -378,7 +379,7 @@ test('change management shows diffs, saves a named checkpoint and restores an ea
   assert.equal(w.document.querySelector('.history-row[aria-current="true"] .history-summary').textContent,'过年前','selection does not move the current-version marker');
   click(w,'#version-before');
   assert.match(w.document.querySelector('#confirm-items').textContent,/删除「奶奶」/);
-  click(w,'#confirm-action');assert.deepEqual(JSON.parse(w.localStorage.getItem(STORAGE_KEY)),JSON.parse(raw));
+  click(w,'#confirm-action');assert.deepEqual(JSON.parse(w.localStorage.getItem(STORAGE_KEY)),migrateState(JSON.parse(raw)));
   click(w,'#show-backups');
   assert.match(w.document.querySelector('#backup-list').textContent,/恢复/);
   assert.equal(w.document.querySelectorAll('.history-restore-edge').length,1);
@@ -400,7 +401,7 @@ test('compact management actions are direct, clear state stays fresh and every v
   const w=await page();t.after(()=>w.happyDOM.close());
   assert.equal(w.document.querySelector('#manage'),null);
   assert.equal(w.document.querySelector('#management-dialog'),null);
-  assert.deepEqual([...w.document.querySelectorAll('.management-card button')].map(button=>button.id),['organize-tree','show-backups','clear-tree']);
+  assert.deepEqual([...w.document.querySelectorAll('.management-card button')].map(button=>button.id),['show-help','organize-tree','show-backups','clear-tree']);
   const toolbar=w.document.querySelector('.viewport-controls');
   assert.equal(toolbar.querySelector('#view-mode').textContent,'2D');
   for(const button of toolbar.querySelectorAll('button'))assert.equal(button.dataset.tooltip,button.getAttribute('aria-label'));
@@ -455,4 +456,50 @@ test('selecting a star stops an unfinished 2D zoom at the visible scale',async t
   assert.ok(Number(zoom)>1);
   click(w,'.person[data-id="dad"] .person-main');assert.equal(callbacks.size,0);
   assert.equal(w.document.querySelector('#tree-scroll').dataset.zoom,zoom);
+});
+
+
+test('named friends build independent trees, edit names in place and delete only their own branch',async t=>{
+ const w=await page();t.after(()=>w.happyDOM.close());
+ click(w,'.person[data-id="me"] .add-person');choose(w,'friend');submit(w);
+ assert.match(w.document.querySelector('#form-error').textContent,/必须填写姓名/);assert.equal(w.localStorage.getItem(STORAGE_KEY),null);
+ w.document.querySelector('#kin-name').value='李四';submit(w);
+ let saved=JSON.parse(w.localStorage.getItem(STORAGE_KEY)),friend=saved.people.at(-1).id;
+ assert.equal(w.document.querySelector('#detail-title').textContent,'李四（朋友）');
+ click(w,`.person[data-id="${friend}"] .add-person`);assert.equal(w.document.querySelector('input[value="friend"]').disabled,true);choose(w,'f');submit(w);
+ saved=JSON.parse(w.localStorage.getItem(STORAGE_KEY));const dad=saved.people.at(-1).id;
+ assert.equal(w.document.querySelector('#detail-title').textContent,'李四的爸爸');assert.equal(w.document.querySelector('#detail-path').textContent,'我的朋友李四的爸爸');
+ assert.equal(w.document.querySelectorAll('#detail-path [aria-pressed="true"]').length,3);
+ click(w,'#detail-title');w.document.querySelector('#person-name').value='张三';w.document.querySelector('#alias-input').value='老爸';
+ const point=w.document.querySelector(`.person[data-id="${dad}"]`).style.cssText;
+ w.document.querySelector('#alias-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+ assert.equal(w.document.querySelector('#detail-title').textContent,'张三（李四的老爸）');assert.equal(w.document.querySelector(`.person[data-id="${dad}"]`).style.cssText,point);
+ click(w,`#detail-path [data-id="${friend}"]`);assert.equal(w.document.querySelectorAll('#detail-path [aria-pressed="true"]').length,2);
+ const me=w.document.querySelector('.person[data-id="me"]').style.cssText;
+ click(w,'#delete-person');assert.match(w.document.querySelector('#confirm-description').textContent,/2 位/);click(w,'#confirm-action');
+ saved=JSON.parse(w.localStorage.getItem(STORAGE_KEY));assert.equal(saved.people.length,1);assert.deepEqual(saved.socialEdges,[]);assert.equal(w.document.querySelector('.person[data-id="me"]').style.cssText,me);
+ click(w,'#undo-last');click(w,'#confirm-action');assert.equal(w.document.querySelectorAll('.person').length,3);
+});
+
+test('relation review offers outlined actions and changing relation preserves entered name and custom title',async t=>{
+ const w=await page(JSON.stringify(data));t.after(()=>w.happyDOM.close());
+ const style=w.document.createElement('style');style.textContent=await readFile(new URL('../src/style.css',import.meta.url),'utf8');w.document.head.append(style);
+ click(w,'.person[data-id="dad"] .add-person');choose(w,'h');
+ w.document.querySelector('#kin-name').value='张三';w.document.querySelector('#kin-title').value='自定义称呼';
+ for(const button of w.document.querySelectorAll('#optimization button')){const css=w.getComputedStyle(button);assert.equal(css.borderTopStyle,'solid');assert.notEqual(css.borderTopColor,'transparent');}
+ click(w,'#change-relation');choose(w,'w');assert.equal(w.document.querySelector('#kin-name').value,'张三');assert.equal(w.document.querySelector('#kin-title').value,'自定义称呼');
+ click(w,'#cancel');assert.equal(w.localStorage.getItem(STORAGE_KEY),JSON.stringify(data));
+});
+
+
+test('WASD resumes after path navigation and profile save without changing zoom',async t=>{
+ const callbacks=new Map();let frame=0,time=0;
+ const w=await page(JSON.stringify(data),{setup(win){win.requestAnimationFrame=cb=>{callbacks.set(++frame,cb);return frame;};win.cancelAnimationFrame=id=>callbacks.delete(id);}});t.after(()=>w.happyDOM.close());
+ const step=()=>{time+=16;const pending=[...callbacks.values()];callbacks.clear();for(const cb of pending)cb(time);};
+ const move=()=>{const node=w.document.querySelector('.person[data-id="me"]'),surface=w.document.querySelector('#tree-scroll'),before=parseFloat(node.style.left),zoom=surface.dataset.zoom;
+ const button=w.document.activeElement;button.dispatchEvent(new w.KeyboardEvent('keydown',{key:'d',code:'KeyD',bubbles:true,cancelable:true}));step();button.dispatchEvent(new w.KeyboardEvent('keyup',{key:'d',code:'KeyD',bubbles:true}));
+ assert.ok(parseFloat(node.style.left)<before);assert.equal(surface.dataset.zoom,zoom);assert.equal(callbacks.size,0);};
+ click(w,'.person[data-id="gm"] .person-main');click(w,'#detail-path [data-id="dad"]');assert.equal(w.document.activeElement.dataset.id,'dad');move();
+ click(w,'#detail-title');w.document.querySelector('#alias-input').value='老爸';w.document.querySelector('#alias-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+ assert.equal(w.document.activeElement.id,'detail-title');move();
 });

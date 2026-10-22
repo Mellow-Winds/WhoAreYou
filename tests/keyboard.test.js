@@ -90,3 +90,22 @@ test('only the active mode moves and pitched combinations keep a constant world 
   assert.deepEqual(viewport.camera,before);assert.ok(Math.abs(camera.position.distanceTo(origin)-5.6)<1e-8);
   keyboard.stop();mode='2d';f.step();assert.equal(f.callbacks.size,0);keyboard.dispose();viewport.stop();
 });
+
+
+test('WASD works after focusing person-card actions in either mode, while editing still blocks movement',t=>{
+ const f=fixture(t),card=f.w.document.createElement('aside');card.id='details';
+ card.innerHTML='<button class="path-step">爸爸</button><button id="detail-title">姓名</button><form><input></form>';
+ f.w.document.body.append(card);
+ for(const mode of ['2d','3d']){
+  const moves=[],keyboard=installMovementKeys(f.surface,(...delta)=>moves.push(delta),{...f.frames,mode});
+  for(const button of card.querySelectorAll('button')){
+   button.focus();for(const code of ['KeyW','KeyA','KeyS','KeyD']){
+    const before=moves.length;f.key('keydown',code.slice(-1).toLowerCase(),button,{code});f.step();
+    assert.equal(moves.length,before+1,mode+' '+button.className+' '+code);
+    f.key('keyup',code.slice(-1).toLowerCase(),button,{code});assert.equal(f.callbacks.size,0);
+   }
+  }
+  const input=card.querySelector('input');input.focus();const count=moves.length;
+  f.key('keydown','w',input,{code:'KeyW'});f.step();assert.equal(moves.length,count);keyboard.dispose();
+ }
+});

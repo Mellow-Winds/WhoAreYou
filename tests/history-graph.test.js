@@ -17,7 +17,7 @@ test('graph connects verified changes and marks the newest matching checkpoint a
   const records=listSnapshots(store),graph=buildHistoryGraph(records,alias);
   assert.deepEqual(graph.rows.slice(0,3).map(row=>row.key),[checkpoint,rename,add]);
   assert.equal(graph.rows.find(row=>row.isCurrent).key,checkpoint);
-  assert.match(graph.rows[1].summary,/备注名：老爸/);
+  assert.match(graph.rows[1].summary,/资料：老爸/);
   assert.deepEqual(graph.edges.filter(edge=>edge.kind==='change'),[{kind:'change',from:0,to:1},{kind:'change',from:1,to:2}]);
   assert.equal(graph.edges.some(edge=>edge.to===3),false,'legacy safety copy has no inferred parent');
   assert.equal(records.some(record=>record.isCurrent),false,'render model must not mutate stored records');

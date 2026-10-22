@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { RELATIONS, initialState, addPerson, suggestTitle, validateState } from '../src/domain.js';
+import { KIN_RELATIONS, initialState, addPerson, suggestTitle, validateState } from '../src/domain.js';
 import { kinshipResult } from '../src/kinship.js';
 import { analyzeAddition, applyAddition } from '../src/optimization.js';
 import { saveState, STORAGE_KEY } from '../src/storage.js';
@@ -10,10 +10,10 @@ test('every 1–4 step combination returns a title or readable descriptive path'
   function visit(path) {
     if(path.length) {
       const result=kinshipResult(path); assert.ok(suggestTitle(path).trim());
-      assert.ok(result.paths.every(p=>p.every(c=>RELATIONS.some(r=>r.code===c))));
+      assert.ok(result.paths.every(p=>p.every(c=>KIN_RELATIONS.some(r=>r.code===c))));
       count++; if(count%1000===0) console.log('checked',count,path.join(',')); if(result.descriptive) descriptive++; else named++;
     }
-    if(path.length<4) for(const relation of RELATIONS) visit([...path,relation.code]);
+    if(path.length<4) for(const relation of KIN_RELATIONS) visit([...path,relation.code]);
   }
   visit([]); assert.equal(count,11110); console.log({combinations:count,named,descriptive});
   assert.deepEqual(kinshipResult(['h','w']).paths,[[]]);

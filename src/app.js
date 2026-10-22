@@ -1,4 +1,4 @@
-import { RELATIONS, pathCodes, pathText, suggestTitle, displayName, updateAlias } from './domain.js';
+import { RELATIONS, pathCodes, pathText, suggestTitle, displayName, updateProfile, isSocial, rootLabel, personPathText, graphEdges } from './domain.js';
 import { loadState } from './storage.js';
 import { layoutTree } from './layout.js';
 import { ancestorChain } from './query.js';
@@ -47,12 +47,12 @@ function renderDetails(chain) {
   if (!selectedId) { cancelAlias(false); delete details.dataset.personId; return; }
   details.dataset.personId = queryId;
   const displayed=chain.find(person => person.id === queryId);
-  $('detail-title').textContent = displayName(displayed);
-  $('detail-title').setAttribute('aria-label','修改'+displayName(displayed)+'的备注名');
+  $('detail-title').textContent = displayName(displayed,state);
+  $('detail-title').setAttribute('aria-label','修改'+displayName(displayed,state)+'的姓名与昵称');
   $('delete-person').hidden=displayed.id==='me';
   const activeIndex = chain.findIndex(person => person.id === queryId);
   for (const [index, person] of chain.entries()) {
-    const label = person.id === 'me' ? '我' : relationByCode.get(person.relation).label;
+    const label = person.id === 'me' ? '我' : person.parentId===null ? (relationByCode.get(state.socialEdges.find(e=>e.to===person.id)?.relation)?.label||'')+person.name : relationByCode.get(person.relation).label;
     const button = element('button', 'path-step', label + (index < chain.length - 1 ? '的' : ''));
     button.type = 'button'; button.dataset.id = person.id;
     button.setAttribute('aria-pressed', String(index <= activeIndex));
@@ -60,7 +60,7 @@ function renderDetails(chain) {
     button.addEventListener('click', () => {
       queryId = person.id; updateSelection(); centerOn(person.id);
       [...$('detail-path').querySelectorAll('button')].find(b => b.dataset.id === person.id)?.focus({ preventScroll:true });
-      $('announcement').textContent = '已回溯到' + displayName(person);
+      $('announcement').textContent = '已回溯到' + displayName(person,state);
     });
     $('detail-path').append(button);
   }
@@ -91,20 +91,19 @@ function render({ preserveLayout = false } = {}) {
   const lines = document.createElementNS(svgNS, 'svg');
   lines.setAttribute('width', '100%'); lines.setAttribute('height', '100%');
   lines.setAttribute('aria-hidden', 'true'); lines.classList.add('connections');
-  for (const person of state.people) {
-    if (person.parentId === null) continue;
+  for (const edge of graphEdges(state)) {
     const line = document.createElementNS(svgNS, 'path');
-    line.dataset.id = person.id; line.dataset.parentId = person.parentId; lines.append(line);
+    line.dataset.id = edge.to; line.dataset.parentId = edge.from; lines.append(line);
   }
   tree.append(lines);
   for (const [index, person] of state.people.entries()) {
-    const wrap = element('div', 'person' + (person.id === 'me' ? ' root-person' : ''));
+    const wrap = element('div', 'person' + (person.parentId === null ? ' root-person' : ''));
     wrap.dataset.id = person.id; wrap.style.setProperty('--breath-delay', '-' + index * .61 + 's');
     const node = element('button', 'person-main');
-    node.type = 'button'; node.title = displayName(person);
-    node.setAttribute('aria-label', '查看' + displayName(person) + '的信息'); node.setAttribute('aria-controls', 'details');
+    node.type = 'button'; node.title = displayName(person,state);
+    node.setAttribute('aria-label', '查看' + displayName(person,state) + '的信息'); node.setAttribute('aria-controls', 'details');
     const star = element('span', 'person-symbol'); star.setAttribute('aria-hidden', 'true');
-    node.append(star, element('span', 'person-title', displayName(person)));
+    node.append(star, element('span', 'person-title', displayName(person,state)));
     node.addEventListener('click', () => {
       stopViewMotion();
       selectedId = queryId === person.id ? null : person.id; queryId = selectedId;
@@ -112,7 +111,7 @@ function render({ preserveLayout = false } = {}) {
       findNode(person.id)?.querySelector('.person-main').focus({ preventScroll:true });
     });
     const plus = element('button', 'add-person', '+');
-    plus.type = 'button'; plus.setAttribute('aria-label', '为' + displayName(person) + '添加亲人');
+    plus.type = 'button'; plus.setAttribute('aria-label', '为' + displayName(person,state) + '添加亲人');
     plus.addEventListener('click', () => openAdder(person.id));
     for (const button of [node,plus]) {
       let start=null,dragged=false;
@@ -123,7 +122,7 @@ function render({ preserveLayout = false } = {}) {
     }
     wrap.append(node, plus); tree.append(wrap); nodesById.set(person.id,wrap);
   }
-  scene3d?.update(state,{preservePositions:preserveLayout}); updateHome();
+  scene3d?.update(state,{preservePositions:preserveLayout}); updateControls();
   updateSelection();
 }
 function updateSelection() {
@@ -159,7 +158,7 @@ function cancelAlias(focus=true){
 $('detail-title').addEventListener('click',()=>{
   const person=state.people.find(p=>p.id===queryId);if(!person)return;
   cancelDetailTransition();aliasEdit={id:person.id,before:JSON.stringify(person)};
-  $('alias-input').value=person.alias??displayName(person);$('alias-input').placeholder='清空后显示：'+person.title;
+  $('person-name').value=person.name||'';$('alias-input').value=person.nickname||'';$('alias-input').placeholder='清空后显示：'+person.title;
   $('alias-error').hidden=true;$('detail-title').hidden=true;$('alias-form').hidden=false;
   $('alias-input').focus();$('alias-input').select();
 });
@@ -170,17 +169,19 @@ $('alias-form').addEventListener('submit',event=>{
   try{
     const latest=loadState(window.localStorage),person=latest.people.find(p=>p.id===aliasEdit.id);
     if(JSON.stringify(person)!==aliasEdit.before)throw new Error('人物资料已变化，请取消后重新编辑。');
-    const next=updateAlias(latest,aliasEdit.id,$('alias-input').value);
+    const next=updateProfile(latest,aliasEdit.id,$('person-name').value,$('alias-input').value);
     if(fingerprint(next)!==fingerprint(latest))commitWithBackup(window.localStorage,latest,next,'alias');
-    state=next;cancelAlias(false);render();$('detail-title').focus({preventScroll:true});$('announcement').textContent='备注名已保存';
+    state=next;cancelAlias(false);render({preserveLayout:true});$('detail-title').focus({preventScroll:true});$('announcement').textContent='资料已保存';
   }catch(error){$('alias-error').textContent=error.message;$('alias-error').hidden=false;}
 });
 $('delete-person').addEventListener('click',()=>{cancelAlias(false);management?.deletePerson(queryId);});
 function closeAdder() { dialog.close(); }
 function openAdder(id) {
   parentId = id; form.reset(); autoTitle = ''; additionBaseline=null; $('kin-title').value = '';
-  $('path-preview').textContent = pathText(pathCodes(state, id)) + ' → …';
-  $('dialog-title').textContent = '为' + displayName(state.people.find(p => p.id === id)) + '添加亲人';
+  for(const input of $('relation-options').querySelectorAll('input')){input.disabled=isSocial(input.value)&&id!=='me';input.parentElement.hidden=input.disabled;}
+  $('kin-name').required=false;$('name-required').textContent='';
+  $('path-preview').textContent = personPathText(state,id) + ' → …';
+  $('dialog-title').textContent = '为' + displayName(state.people.find(p => p.id === id),state) + '添加亲人';
   $('optimization').hidden = true; $('optimization-options').replaceChildren();$('add-actions').hidden=false;
   formError(''); dialog.showModal(); $('relation-options').querySelector('input').focus();
 }
@@ -190,14 +191,14 @@ function renderOptimization(analysis,source=state) {
   additionBaseline=analysis.warning?fingerprint(source):null;
   $('optimization-options').replaceChildren();
   if (!analysis.warning) return;
-  $('optimization-heading').textContent=analysis.hasIssues?'检测到问题':'检测到可优化的树关系';
+  $('optimization-heading').textContent=analysis.hasIssues?'检测到需要核对的关系':'检测到可优化的树关系';
   const issues=(analysis.issues||[]).map(issue=>issue.message).join(' ');
-  $('optimization-reason').textContent=(issues?issues+' ':'')+pathText(analysis.originalPath)+
+  $('optimization-reason').textContent=(issues?issues+' ':'')+pathText(analysis.originalPath,rootLabel(source,parentId))+
     (analysis.ambiguous?'。存在多种可能，请按实际人物选择。':'');
   for (const option of analysis.options) {
     const button=element('button','optimization-action secondary');button.type='button';button.dataset.decision=option.key;
-    const name=option.kind==='existing'?displayName(source.people.find(p=>p.id===option.personId)):suggestTitle(option.path);
-    button.append(element('span','','修改为：'+(option.kind==='existing'?'复用':'新建')+'「'+name+'」'),element('small','',pathText(option.path)));
+    const name=option.kind==='existing'?displayName(source.people.find(p=>p.id===option.personId),source):suggestTitle(option.path);
+    button.append(element('span','','修改为：'+(option.kind==='existing'?'复用':'新建')+'「'+name+'」'),element('small','',pathText(option.path,rootLabel(source,parentId))));
     button.addEventListener('click',()=>saveAddition(option.key));$('optimization-options').append(button);
   }
 }
@@ -208,7 +209,9 @@ for (const relation of RELATIONS) {
   input.addEventListener('change', () => {
     try {
       const codes = [...pathCodes(state, parentId), relation.code];
-      $('path-preview').textContent = pathText(codes); autoTitle = suggestTitle(codes); $('kin-title').value = autoTitle;
+      $('kin-name').required=isSocial(relation.code);$('name-required').textContent=isSocial(relation.code)?'（必填）':'';
+      const previousTitle=$('kin-title').value,custom=previousTitle&&previousTitle!==autoTitle;
+      $('path-preview').textContent = pathText(codes,rootLabel(state,parentId)); autoTitle = isSocial(relation.code)?relation.label:suggestTitle(codes); if(!custom)$('kin-title').value = autoTitle;
       renderOptimization(analyzeAddition(state, parentId, relation.code)); formError('');
     } catch (error) { formError(error.message); }
   });
@@ -219,6 +222,8 @@ function saveAddition(decision) {
   try {
     const relation = form.querySelector('input[name="relation"]:checked')?.value;
     if (!relation) throw new Error('请选择关系。');
+    const name=$('kin-name').value.trim();
+    if(isSocial(relation)&&!name){$('kin-name').focus();throw new Error('朋友、同事和搭子必须填写姓名。');}
     const title = $('kin-title').value.trim();
     if (!title) { $('kin-title').focus(); throw new Error('请填写称呼。'); }
     const latest = loadState(window.localStorage), analysis = analyzeAddition(latest, parentId, relation);
@@ -231,7 +236,7 @@ function saveAddition(decision) {
     }
     const choice = analysis.options.find(o => o.key === decision);
     const savedTitle = choice?.kind === 'new' && title === autoTitle ? suggestTitle(choice.path) : title;
-    const result = applyAddition(latest, parentId, relation, savedTitle, crypto.randomUUID(), decision ?? 'original');
+    const result = applyAddition(latest, parentId, relation, savedTitle, crypto.randomUUID(), decision ?? 'original',name);
     commitWithBackup(window.localStorage,latest,result.state,'add');
     state = result.state; selectedId = result.personId; queryId = result.personId; render(); closeAdder(); centerOn(result.personId);
     $('announcement').textContent = decision?.startsWith('existing:') ? '已定位到已有亲人' : '已添加亲人';
@@ -239,6 +244,7 @@ function saveAddition(decision) {
   } catch (error) { formError(error.message); }
 }
 form.addEventListener('submit', event => { event.preventDefault(); saveAddition(); });
+$('change-relation').addEventListener('click',()=>{$('optimization').hidden=true;$('add-actions').hidden=false;formError('');$('relation-options').querySelector('input:checked')?.focus();});
 $('keep-original').addEventListener('click', () => saveAddition('original'));
 for (const id of ['cancel', 'cancel-x','optimization-cancel']) $(id).addEventListener('click', closeAdder);
 dialog.addEventListener('close', () => findNode(parentId)?.querySelector('.add-person').focus({ preventScroll:true }));
@@ -250,7 +256,7 @@ function load() {
   try {
     state = loadState(window.localStorage);
     if (selectedId && !state.people.some(p => p.id === selectedId)) { selectedId = null; queryId = null; }
-    notice(''); render(); centerOn(queryId ?? 'me', false); management?.refreshHome();
+    notice(''); render(); centerOn(queryId ?? 'me', false); management?.refreshRecovery();
   } catch (error) {
     notice('无法读取亲友资料：' + error.message + ' 原数据未被覆盖。');
     $('tree').replaceChildren(); details.hidden = true;
@@ -271,10 +277,7 @@ $('zoom-out').addEventListener('click', () => { if(viewMode==='3d')scene3d?.zoom
 $('reset-view').addEventListener('click', () => { if(viewMode==='3d')scene3d?.focus('me');else if (positions.has('me')) viewport.center(positions.get('me'), true); });
 load();
 
-function updateHome() {
-  $('home-count').textContent=(state.people.length-1)+' 位亲人';$('enter-map').textContent=state.people.length>1?'继续探索':'开始探索';
-  $('enter-map').disabled=false;$('clear-tree').disabled=state.people.length===1;
-}
+function updateControls() { $('clear-tree').disabled=state.people.length===1; }
 function updateModeButton() {
   const button=$('view-mode'),label=viewMode==='3d'?'切换到 2D':'切换到 3D';
   button.textContent=viewMode.toUpperCase();button.dataset.tooltip=label;button.setAttribute('aria-label',label);
@@ -303,14 +306,7 @@ async function setMode(mode) {
   applyCamera(viewport.camera);
   if(!$('map-page').hidden)$('tree-scroll').focus({preventScroll:true});
 }
-function route() {
-  const map=window.location.hash==='#/map';$('home-page').hidden=map;$('map-page').hidden=!map;
-  if(!map){modeRequest++;viewport.stop();scene3d?.setActive(false);management?.close();cancelAlias(false);if(dialog.open)closeAdder();}
-  else if(state&&$('notice').hidden){if(scene3d&&viewMode==='3d')scene3d.setActive(!document.hidden);else if(desiredMode==='3d')setMode('3d');}
-  if(map)$('tree-scroll').focus({preventScroll:true});else $('enter-map').focus({preventScroll:true});
-}
-$('enter-map').addEventListener('click',()=>{window.location.hash='/map';route();});
-$('go-home').addEventListener('click',()=>{window.location.hash='/home';route();});
+function route(){if(state&&$('notice').hidden){if(scene3d&&viewMode==='3d')scene3d.setActive(!document.hidden);else if(desiredMode==='3d')setMode('3d');}}
 $('view-mode').addEventListener('click',()=>setMode(viewMode==='3d'?'2d':'3d'));
 $('fit-view').addEventListener('click',()=>{if(viewMode==='3d')scene3d.fit();else{const points=[...positions.values()];const xs=points.map(p=>p.x),ys=points.map(p=>p.y);viewport.fit({x:(Math.min(...xs)+Math.max(...xs))/2,y:(Math.min(...ys)+Math.max(...ys))/2,width:Math.max(...xs)-Math.min(...xs),height:Math.max(...ys)-Math.min(...ys)});}});
 management=installManagement({storage:window.localStorage,onError:message=>{ $('feedback-text').textContent=message; $('action-feedback').hidden=false; $('undo-last').hidden=true; },onChange:(next,remap,options={})=>{
@@ -319,9 +315,9 @@ management=installManagement({storage:window.localStorage,onError:message=>{ $('
   state=next;selectedId=remap?.get(selectedId)||selectedId;queryId=remap?.get(queryId)||queryId;
   if(options.clearSelection){selectedId=null;queryId=null;}
   if(!next.people.some(p=>p.id===selectedId)){selectedId=null;queryId=null;}
-  render({preserveLayout:options.preserveLayout});if(!options.preserveView)centerOn(queryId||'me');management.refreshHome();
+  render({preserveLayout:options.preserveLayout});if(!options.preserveView)centerOn(queryId||'me');management.refreshRecovery();
 }});
-management.refreshHome();window.addEventListener('hashchange',route);
+management.refreshRecovery();window.addEventListener('hashchange',route);
 document.addEventListener('visibilitychange',()=>{viewport.stop();if(viewMode==='3d')scene3d?.setActive(!document.hidden&&!$('map-page').hidden);});
 window.addEventListener('pagehide',()=>{scene3d?.dispose();scene3d=null;});
 window.addEventListener('resize',()=>scene3d?.resize());

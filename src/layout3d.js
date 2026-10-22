@@ -1,10 +1,9 @@
-import { validateState } from './domain.js';
+import { validateState, familyRoot } from './domain.js';
 const hash = text => { let value=2166136261; for(const char of text) value=Math.imul(value^char.charCodeAt(0),16777619); return (value>>>0)/4294967296; };
-export function layout3D(state) {
-  validateState(state);
+function familyLayout(state,rootId) {
   const children=new Map(state.people.map(p=>[p.id,[]]));
   for(const person of state.people) if(person.parentId) children.get(person.parentId).push(person);
-  const positions=new Map([['me',{x:0,y:0,z:0}]]), queue=[{id:'me',depth:0,theta:0,span:Math.PI*2}];
+  const positions=new Map([[rootId,{x:0,y:0,z:0}]]), queue=[{id:rootId,depth:0,theta:0,span:Math.PI*2}];
   let radius=0;
   for(let index=0;index<queue.length;index++) {
     const current=queue[index], relatives=children.get(current.id);
@@ -19,4 +18,16 @@ export function layout3D(state) {
     });
   }
   return {positions,radius:Math.max(radius,100)};
+}
+
+export function layout3D(state){
+  validateState(state);
+  const layouts=state.people.filter(p=>p.parentId===null).sort((a,b)=>Number(b.id==='me')-Number(a.id==='me')).map(root=>familyLayout({people:state.people.filter(p=>familyRoot(state,p.id).id===root.id)},root.id));
+  const positions=new Map();let offset=0,previous=0,radius=100;
+  layouts.forEach((layout,index)=>{
+    if(index)offset+=previous+layout.radius+240;
+    for(const [id,p] of layout.positions)positions.set(id,{x:p.x+offset,y:p.y,z:p.z});
+    previous=layout.radius;radius=Math.max(radius,offset+layout.radius);
+  });
+  return {positions,radius};
 }

@@ -16,22 +16,22 @@ test('aliases preserve original titles and paths, clear cleanly and round trip w
   assert.equal(displayName(original.people[1]), '老公');
   const before = fingerprint(original), named = updateAlias(original, 'husband', '  先生  '), husband = named.people[1];
   assert.equal(displayName(husband), '先生');
-  assert.equal(husband.alias, '先生');
+  assert.equal(husband.nickname, '先生');
   assert.equal(husband.title, '老公');
   assert.deepEqual(pathCodes(named, 'husband'), ['h']);
   assert.equal(fingerprint(original), before);
   const storage = store(original); saveState(storage, named);
   assert.deepEqual(loadState(storage), named);
   const cleared = updateAlias(named, 'husband', '  ');
-  assert.equal(Object.hasOwn(cleared.people[1], 'alias'), false);
+  assert.equal(Object.hasOwn(cleared.people[1], 'nickname'), false);
   assert.equal(displayName(cleared.people[1]), '老公');
-  assert.equal(named.people[1].alias, '先生');
+  assert.equal(named.people[1].nickname, '先生');
   assert.throws(() => updateAlias(named, 'missing', '名字'), /不存在/);
   for (const alias of [null, 2, {}, '字'.repeat(81)]) {
-    assert.throws(() => updateAlias(named, 'husband', alias), /备注名/);
-    assert.throws(() => validateState({ ...named, people: [named.people[0], { ...husband, alias }] }), /备注名/);
+    assert.throws(() => updateAlias(named, 'husband', alias), /姓名和昵称/);
+    assert.throws(() => validateState({ ...named, people: [named.people[0], { ...husband, nickname:alias }] }), /姓名和昵称/);
   }
-  assert.equal(updateAlias(named, 'husband', '字'.repeat(80)).people[1].alias.length, 80);
+  assert.equal(updateAlias(named, 'husband', '字'.repeat(80)).people[1].nickname.length, 80);
 });
 
 test('subtree deletion removes all descendants despite array order and retains unrelated data without mutations', () => {
@@ -41,7 +41,7 @@ test('subtree deletion removes all descendants despite array order and retains u
   state = add(state, 'dad', 'lb', 'uncle', '叔叔');
   state = add(state, 'me', 'm', 'mom', '妈妈');
   state = updateAlias(state, 'grandma', '奶奶备注');
-  state.people.find(person => person.id === 'grandma').mergeHistory = [{ id: 'old', title: '旧名', alias: '旧备注' }];
+  state.people.find(person => person.id === 'grandma').mergeHistory = [{ id: 'old', title: '旧名', nickname: '旧备注' }];
   state.people = [...state.people].reverse();
   const before = fingerprint(state);
   assert.deepEqual(subtreePeople(state, 'dad').map(person => person.id), ['uncle', 'aunt', 'grandma', 'dad']);
@@ -80,17 +80,17 @@ test('merge requires a visible name choice and preserves complete source and rep
   state = add(state, 'me', 'os', 'target', '姐姐');
   state = updateAlias(state, 'source', '大姐'); state = updateAlias(state, 'target', '姐姐备注');
   const source = state.people.find(person => person.id === 'source'), target = state.people.find(person => person.id === 'target');
-  source.mergeHistory = [{ id: 'older-source', title: '源旧称呼', alias: '源旧备注' }];
-  target.mergeHistory = [{ id: 'older-target', title: '目标旧称呼', alias: '目标旧备注' }];
+  source.mergeHistory = [{ id: 'older-source', title: '源旧称呼', nickname: '源旧备注' }];
+  target.mergeHistory = [{ id: 'older-target', title: '目标旧称呼', nickname: '目标旧备注' }];
   target.sourcePaths = [['f', 'd']];
   const before = fingerprint(state);
   assert.equal(suggestionsFor(state, source).options.find(option => option.personId === 'target').title, '姐姐备注');
   assert.throws(() => applyDecisions(state, [{ personId: 'source', optionKey: 'existing:target' }]), /称呼/);
   const kept = applyDecisions(state, [{ personId: 'source', optionKey: 'existing:target', titleChoice: 'target' }]).state.people.find(person => person.id === 'target');
-  assert.equal(kept.alias, '姐姐备注');
+  assert.equal(kept.nickname, '姐姐备注');
   assert.deepEqual(kept.mergeHistory.find(person => person.id === 'source'), { ...source, originalPath: ['os'] });
   const replaced = applyDecisions(state, [{ personId: 'source', optionKey: 'existing:target', titleChoice: 'source' }]).state.people.find(person => person.id === 'target');
-  assert.equal(replaced.title, source.title); assert.equal(replaced.alias, source.alias);
+  assert.equal(replaced.title, source.title); assert.equal(replaced.nickname, source.nickname);
   assert.deepEqual(replaced.mergeHistory.find(person => person.id === 'target'), { ...target, originalPath: ['os'] });
   assert.equal(fingerprint(state), before);
 });
@@ -99,13 +99,13 @@ test('merge choice copies the original title and alias as a pair, while shorteni
   let state = add(initialState(), 'me', 'os', 'source', '大姐');
   state = add(state, 'me', 'os', 'target', '姐姐'); state = updateAlias(state, 'target', '大姐');
   const defaultTarget = applyDecisions(state, [{ personId: 'source', optionKey: 'existing:target' }]).state.people.find(person => person.id === 'target');
-  assert.equal(defaultTarget.title, '姐姐'); assert.equal(defaultTarget.alias, '大姐');
+  assert.equal(defaultTarget.title, '姐姐'); assert.equal(defaultTarget.nickname, '大姐');
   const chosenSource = applyDecisions(state, [{ personId: 'source', optionKey: 'existing:target', titleChoice: 'source' }]).state.people.find(person => person.id === 'target');
-  assert.equal(chosenSource.title, '大姐'); assert.equal(Object.hasOwn(chosenSource, 'alias'), false);
-  assert.ok(chosenSource.mergeHistory.some(person => person.id === 'target' && person.title === '姐姐' && person.alias === '大姐'));
+  assert.equal(chosenSource.title, '大姐'); assert.equal(Object.hasOwn(chosenSource, 'nickname'), false);
+  assert.ok(chosenSource.mergeHistory.some(person => person.id === 'target' && person.title === '姐姐' && person.nickname === '大姐'));
   let branch = add(initialState(), 'me', 's', 'son', '儿子');
   branch = add(branch, 'son', 'ls', 'daughter', '女儿'); branch = updateAlias(branch, 'daughter', '小宝');
   const shortened = applyDecisions(branch, [{ personId: 'daughter', optionKey: 'new:me:d' }]).state;
-  assert.equal(shortened.people.find(person => person.id === 'daughter').alias, '小宝');
+  assert.equal(shortened.people.find(person => person.id === 'daughter').nickname, '小宝');
   assert.deepEqual(pathCodes(shortened, 'daughter'), ['d']);
 });

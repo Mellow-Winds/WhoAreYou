@@ -8,15 +8,10 @@
 <body>
   <main>
     <div id="notice" class="notice" role="alert" hidden><span id="notice-text"></span><button id="retry" type="button">重新读取</button></div>
-    <section id="home-page" class="home-page">
-      <div class="home-orbit" aria-hidden="true"><i></i><i></i><i></i></div>
-      <div class="home-content"><p class="eyebrow">亲友星云</p><h1>WhoAreYou</h1><p id="home-count">0 位亲人</p>
-      <button id="enter-map" class="primary" type="button">开始探索</button><button id="restore-home" class="secondary" type="button" hidden>恢复上次清除</button></div>
-    </section>
-    <section id="map-page" class="tree-frame" aria-label="亲友星空图" hidden>
+    <section id="map-page" class="tree-frame" aria-label="亲友星空图">
       <header class="map-toolbar">
-        <button id="go-home" type="button">首页</button>
         <nav class="management-card" aria-label="管理">
+          <button id="show-help" type="button">帮助</button>
           <button id="organize-tree" type="button">整理</button>
           <button id="show-backups" type="button">变更管理</button>
           <button id="clear-tree" class="clear-control" type="button">清除</button>
@@ -27,9 +22,10 @@
       <div id="tree-scroll" class="tree-scroll" tabindex="0" aria-label="亲友星空，可拖动平移，滚轮缩放，方向键移动"><div id="tree" class="tree"></div></div>
       <aside id="details" class="details" hidden aria-label="亲人信息与关系查询">
         <button id="close-details" class="icon-button close-details" type="button" aria-label="收起信息">×</button>
-        <div id="detail-content" class="detail-content"><h2><button id="detail-title" class="editable-title" type="button" title="修改备注名"></button></h2>
+        <div id="detail-content" class="detail-content"><h2><button id="detail-title" class="editable-title" type="button" title="修改姓名与昵称"></button></h2>
         <form id="alias-form" class="alias-form" hidden novalidate>
-          <label class="sr-only" for="alias-input">备注名</label><input id="alias-input" maxlength="80" autocomplete="off">
+          <label for="person-name">姓名</label><input id="person-name" maxlength="80" autocomplete="off">
+          <label for="alias-input">昵称</label><input id="alias-input" maxlength="80" autocomplete="off">
           <div class="alias-actions"><button class="primary" type="submit">保存</button><button id="alias-cancel" class="secondary" type="button">取消</button></div>
           <p id="alias-error" class="form-error" role="alert" hidden></p>
         </form>
@@ -50,6 +46,7 @@
     <form id="add-form" novalidate>
       <div class="dialog-heading"><h2 id="dialog-title">添加亲人</h2><button id="cancel-x" class="icon-button" type="button" aria-label="关闭添加器">×</button></div>
       <fieldset><legend>关系</legend><div id="relation-options" class="relation-options"></div><p id="path-preview" class="path-preview" aria-live="polite"></p></fieldset>
+      <label class="title-label" for="kin-name">姓名<span id="name-required"></span></label><input id="kin-name" maxlength="80" autocomplete="off" placeholder="亲属可选填">
       <label class="title-label" for="kin-title">称呼</label>
       <input id="kin-title" name="title" autocomplete="off" placeholder="选择关系后自动生成" required maxlength="80">
       <p id="form-error" class="form-error" role="alert" hidden></p>      <section id="optimization" class="optimization" hidden aria-labelledby="optimization-heading" role="region">
@@ -57,10 +54,20 @@
         <p id="optimization-reason"></p>
         <button id="keep-original" type="button" class="secondary optimization-action">无视，直接添加</button>
         <div id="optimization-options"></div>
+        <button id="change-relation" type="button" class="secondary optimization-action">修改关系</button>
         <button id="optimization-cancel" type="button" class="secondary optimization-action">取消</button>
       </section>
       <div id="add-actions" class="dialog-actions"><button id="cancel" class="secondary" type="button">取消</button><button class="primary" type="submit">添加</button></div>
     </form>
+  </dialog>
+  <dialog id="help-dialog" aria-labelledby="help-title">
+    <div class="dialog-heading"><h2 id="help-title">帮助</h2><button type="button" class="icon-button" data-close-dialog="help-dialog" aria-label="关闭帮助">×</button></div>
+    <h3>探索星云</h3><p>点击星点查看资料；点击路径标签回溯人物。悬浮或选中星点后，点击 ＋ 添加关系人。</p>
+    <h3>移动与视角</h3><p>2D：拖动或 WASD 上下左右移动。3D：拖动原地转头，WASD 前后左右移动，空格上升，左 Shift 下降。滚轮或工具栏调整缩放；◎ 回到“我”，⌗ 查看全图。</p>
+    <p>触屏：拖动探索，点选星点后添加，使用右下角按钮缩放。弹窗或输入资料时暂停移动。</p>
+    <h3>人物与关系</h3><p>选择关系后自动生成称呼，可自行修改。点击资料卡标题编辑姓名、昵称。朋友、同事和搭子从“我”添加，必须填写姓名，其亲属拥有独立关系树。</p>
+    <h3>保存与恢复</h3><p>资料仅保存在当前浏览器，请只记录适当的亲友信息。整理会先预览，删除包括所选人物全部后代。“变更管理”可存档、查看差异和恢复版本；清除浏览器数据会丢失本地资料与历史。</p>
+    <button id="restore-cleared" class="secondary" type="button" hidden>恢复上次清除</button>
   </dialog>
   <dialog id="organize-dialog" class="wide-dialog" aria-labelledby="organize-title"><div class="dialog-heading"><h2 id="organize-title">整理关系</h2><button type="button" class="icon-button" data-close-dialog="organize-dialog" aria-label="取消整理">×</button></div><p id="scan-progress" role="status"></p><div id="suggestions"></div><p id="organize-error" class="form-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" class="secondary" data-close-dialog="organize-dialog">取消</button><button id="preview-organize" class="primary" type="button" disabled>预览修改</button></div></dialog>
   <dialog id="confirm-dialog" class="wide-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title">确认修改</h2><p id="confirm-description"></p><ul id="confirm-items"></ul><p id="confirm-error" class="form-error" role="alert" hidden></p><div class="dialog-actions"><button id="confirm-cancel" class="secondary" type="button">取消</button><button id="confirm-action" class="primary" type="button">确认应用</button></div></dialog>

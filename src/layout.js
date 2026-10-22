@@ -1,8 +1,9 @@
+import { familyRoot } from './domain.js';
 // Each branch owns an angular sector; generations move outward from "me".
-export function layoutTree(state, minWidth = 600, minHeight = 600) {
+function familyLayout(state, minWidth = 600, minHeight = 600, rootId = 'me') {
   const children = new Map(state.people.map(p => [p.id, []]));
   state.people.forEach(p => { if (p.parentId !== null) children.get(p.parentId).push(p.id); });
-  const depths = new Map([['me', 0]]), order = [], stack = ['me'];
+  const depths = new Map([[rootId, 0]]), order = [], stack = [rootId];
   while (stack.length) {
     const id = stack.pop(); order.push(id);
     for (const child of [...children.get(id)].reverse()) {
@@ -13,8 +14,8 @@ export function layoutTree(state, minWidth = 600, minHeight = 600) {
   for (const id of [...order].reverse()) {
     weights.set(id, Math.max(1, children.get(id).reduce((sum, child) => sum + weights.get(child), 0)));
   }
-  const angles = new Map([['me', -Math.PI / 2]]);
-  const sectors = new Map([['me', [-Math.PI * 1.5, Math.PI / 2]]]);
+  const angles = new Map([[rootId, -Math.PI / 2]]);
+  const sectors = new Map([[rootId, [-Math.PI * 1.5, Math.PI / 2]]]);
   const rings = new Map();
   for (const id of order) {
     const [start, end] = sectors.get(id);
@@ -48,4 +49,17 @@ export function layoutTree(state, minWidth = 600, minHeight = 600) {
     positions.set(id, { x: width / 2 + Math.cos(angles.get(id)) * radius, y: height / 2 + Math.sin(angles.get(id)) * radius });
   }
   return { positions, width, height };
+}
+
+export function layoutTree(state,minWidth=600,minHeight=600){
+  const roots=state.people.filter(p=>p.parentId===null).sort((a,b)=>Number(b.id==='me')-Number(a.id==='me'));
+  if(roots.length===1)return familyLayout(state,minWidth,minHeight);
+  const positions=new Map();let width=0,height=minHeight;
+  for(const root of roots){
+    const family={people:state.people.filter(p=>familyRoot(state,p.id).id===root.id)};
+    const layout=familyLayout(family,minWidth,minHeight,root.id);
+    for(const [id,p] of layout.positions)positions.set(id,{x:p.x+width,y:p.y});
+    width+=layout.width+180;height=Math.max(height,layout.height);
+  }
+  return {positions,width:width-180,height};
 }

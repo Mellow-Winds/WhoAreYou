@@ -12,7 +12,7 @@ export function installMovementKeys(surface, move, { enabled = () => true, mode 
   function eligible(target) {
     return enabled() && !document.hidden && target?.closest &&
       !document.querySelector('dialog[open]') &&
-      !target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), #details');
+      !target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])');
   }
   function stop() {
     keys.clear(); last = null;

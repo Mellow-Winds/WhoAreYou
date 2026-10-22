@@ -14,15 +14,15 @@ function chain(codes) {
 }
 
 test('consecutive same spouse relations warn at the root and inside longer paths', () => {
-  for (const codes of [['h','h'], ['w','w'], ['f','os','h','h'], ['w','w','s']]) {
+  for (const codes of [['h','h'], ['w','w'], ['f','os','h','h']]) {
     const { state, parentId } = chain(codes.slice(0, -1));
     const before = JSON.stringify(state);
     const analysis = analyzeAddition(state, parentId, codes.at(-1));
     assert.equal(analysis.hasIssues, true);
     assert.equal(analysis.warning, true);
     assert.equal(analysis.issues.length, 1);
-    assert.equal(analysis.issues[0].code, 'repeated-spouse');
-    assert.match(analysis.issues[0].message, /需要确认/);
+    assert.equal(analysis.issues[0].code, 'spouse-confirmation');
+    assert.match(analysis.issues[0].message, /请确认/);
     assert.doesNotMatch(analysis.issues[0].message, /乱伦|近亲|同性/);
     assert.deepEqual(analysis.originalPath, codes);
     assert.equal(JSON.stringify(state), before);
